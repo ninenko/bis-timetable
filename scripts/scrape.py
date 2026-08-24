@@ -23,9 +23,10 @@ tuples, then merged. The merge is also the integrity check: an event that shows
 up in only one view is reported in the coverage block so the UI can warn.
 """
 
-import argparse, collections, datetime, hashlib, json, os, re, sys, urllib.request
+import argparse, collections, datetime, hashlib, json, os, re, socket, sys, time, urllib.request
 
 BASE = "https://www.bis.kg/timetable/timetable.php"
+IPV4_ONLY = os.environ.get("BIS_IPV4_ONLY", "1") != "0"
 VIEWS = ("te", "cr", "sy")
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -34,11 +35,34 @@ UA = "Mozilla/5.0 (compatible; bis-timetable/1.0; +https://github.com/ninenko/bi
 
 # ---------------------------------------------------------------- fetching
 
-def fetch(access, t, view, timeout=60):
+def _force_ipv4():
+    """bis.kg publishes an AAAA record. Hosts with no IPv6 route (GitHub's
+    runners among them) otherwise burn a connect timeout per request before
+    falling back, which turns a 20-second scrape into a 20-minute one."""
+    if not IPV4_ONLY:
+        return
+    real = socket.getaddrinfo
+
+    def ipv4_only(host, port, family=0, *a, **kw):
+        res = real(host, port, socket.AF_INET, *a, **kw)
+        return res or real(host, port, family, *a, **kw)
+
+    socket.getaddrinfo = ipv4_only
+
+
+def fetch(access, t, view, timeout=30, tries=3):
     url = "%s?access=%s&t=%s&view=%s" % (BASE, access, t, view)
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8", "replace")
+    last = None
+    for attempt in range(tries):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read().decode("utf-8", "replace")
+        except Exception as e:
+            last = e
+            if attempt + 1 < tries:
+                time.sleep(2 * (attempt + 1))
+    raise last
 
 
 def page_meta(html):
@@ -57,7 +81,11 @@ def page_meta(html):
 
 
 def discover(access, start=100, stop=140, verbose=True):
-    """Probe t ids. Returns list of {t, schoolyear, term, ...} for non-empty ones."""
+    """Probe t ids. Returns list of {t, schoolyear, term, ...} for non-empty ones.
+
+    Stops after enough consecutive empties: term ids are contiguous-ish, and
+    every probe is a full page fetch, so scanning the whole range every run
+    would cost more than the scrape itself."""
     found, misses = [], 0
     for t in range(start, stop):
         try:
@@ -73,7 +101,7 @@ def discover(access, start=100, stop=140, verbose=True):
                               % (t, m["schoolyear"], m["term"], m["entities"]), file=sys.stderr)
         else:
             misses += 1
-            if misses >= 8 and found:
+            if misses >= 4 and found:
                 break
     return found
 
@@ -377,6 +405,7 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "data", "timetable.json"))
     a = ap.parse_args()
 
+    _force_ipv4()
     cfg, cfg_path = load_config()
     access = a.access or cfg.get("access", "wip")
     t = a.t or cfg.get("t", 110)
@@ -389,10 +418,17 @@ def main():
     else:
         if a.discover or cfg.get("autoDiscover", True):
             print("Discovering terms...", file=sys.stderr)
-            found = discover(access, cfg.get("probeFrom", 100), cfg.get("probeTo", 140))
+            known = [x["t"] for x in discovered if isinstance(x, dict) and "t" in x]
+            first = max([cfg.get("probeFrom", 100)] + [t] + known) if not a.discover \
+                    else cfg.get("probeFrom", 100)
+            found = discover(access, first, cfg.get("probeTo", 140))
             if found:
-                discovered = [{k: m[k] for k in ("t", "schoolyear", "term", "section", "review")}
+                seen = {m["t"] for m in found}
+                discovered = [x for x in discovered
+                              if isinstance(x, dict) and x.get("t") not in seen] + \
+                             [{k: m[k] for k in ("t", "schoolyear", "term", "section", "review")}
                               for m in found]
+                discovered.sort(key=lambda x: x.get("t", 0))
                 if cfg.get("pinTerm"):
                     print("Term pinned to t=%s by config." % t, file=sys.stderr)
                 else:
