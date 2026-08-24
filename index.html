@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BIS Timetable</title>
+<style>
+:root{
+  --bg:#f7f7f5; --panel:#fff; --ink:#1c1c1a; --muted:#6b6b63; --line:#e3e2dd;
+  --accent:#2f6f5e; --accent-soft:#e6f0ec; --warn:#8a5a00; --warn-soft:#fdf1d8;
+  --shadow:0 1px 2px rgba(0,0,0,.05),0 8px 24px rgba(0,0,0,.05);
+  --radius:10px; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#16171a; --panel:#1e2024; --ink:#e8e8e4; --muted:#9a9a92; --line:#2e3136;
+  --accent:#6fbfa4; --accent-soft:#1d2f2a; --warn:#e0b356; --warn-soft:#3a2f16;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.3);
+}}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.wrap{max-width:1400px;margin:0 auto;padding:0 16px 64px}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:40;background:var(--bg);border-bottom:1px solid var(--line)}
+.hdr{max-width:1400px;margin:0 auto;padding:10px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.brand{font-weight:650;letter-spacing:-.01em;font-size:17px;white-space:nowrap;cursor:pointer}
+.brand span{color:var(--muted);font-weight:400}
+.grow{flex:1 1 220px;min-width:180px;position:relative}
+.stamp{font-size:12px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:6px}
+.stamp.stale{color:var(--warn);background:var(--warn-soft);padding:4px 8px;border-radius:999px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block}
+.stamp.stale .dot{background:var(--warn)}
+.gear{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:8px;
+      padding:5px 9px;cursor:pointer;font-size:13px}
+.gear:hover{color:var(--ink)}
+
+/* ---------- search ---------- */
+.searchbox{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel);color:var(--ink);font:15px var(--sans);box-shadow:var(--shadow)}
+.searchbox:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  max-height:min(60vh,420px);overflow:auto;z-index:60;display:none}
+.results.open{display:block}
+.res-group{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+  padding:8px 12px 4px;position:sticky;top:0;background:var(--panel)}
+.res{padding:7px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:10px}
+.res:hover,.res.sel{background:var(--accent-soft)}
+.res small{color:var(--muted)}
+
+/* ---------- tabs ---------- */
+nav.tabs{display:flex;gap:4px;margin:16px 0 12px;flex-wrap:wrap}
+.tab{padding:6px 12px;border-radius:999px;border:1px solid transparent;cursor:pointer;
+  font-size:14px;color:var(--muted)}
+.tab:hover{color:var(--ink)}
+.tab.on{background:var(--panel);border-color:var(--line);color:var(--ink);font-weight:550;box-shadow:var(--shadow)}
+
+/* ---------- generic panel ---------- */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
+h1{font-size:22px;margin:0 0 2px;letter-spacing:-.01em}
+h2{font-size:15px;margin:0 0 10px;font-weight:600}
+.sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.muted{color:var(--muted)}
+
+/* ---------- grid ---------- */
+.gridwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.tt{border-collapse:separate;border-spacing:0;width:100%;min-width:900px}
+table.tt th,table.tt td{border-bottom:1px solid var(--line);vertical-align:top;padding:0}
+table.tt thead th{background:var(--bg);
+  font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:600;padding:8px 10px;text-align:left;border-bottom:1px solid var(--line)}
+.pcell{width:104px;min-width:104px;padding:10px 10px 10px 2px;white-space:nowrap}
+.pnum{font-weight:600;font-size:13px;white-space:normal}
+.ptime{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+tr.brk td{background:transparent;padding:2px 0}
+tr.brk .pcell{color:var(--muted);font-size:11px;padding:4px 10px 4px 2px}
+td.slot{padding:4px 5px 4px 0;width:19%}
+.ev{border-radius:8px;padding:6px 8px;margin-bottom:4px;border-left:3px solid var(--evc,var(--accent));
+  background:var(--evbg,var(--accent-soft))}
+.ev .s{font-weight:600;font-size:13px;line-height:1.25}
+.ev .m{font-size:12px;color:var(--muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:4px 6px}
+.chip{cursor:pointer;border-bottom:1px dotted currentColor}
+.chip:hover{color:var(--ink)}
+.ev .t{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.free{color:var(--muted);font-size:12px;padding:6px 2px;opacity:.45}
+
+/* ---------- pickers / lists ---------- */
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.pill{background:var(--accent-soft);color:var(--ink);border:1px solid var(--line);
+  border-radius:999px;padding:4px 10px;font-size:13px;display:flex;gap:6px;align-items:center}
+.pill b{font-weight:600}
+.pill .x{cursor:pointer;color:var(--muted)}
+.pill .x:hover{color:var(--ink)}
+.matrix{border-collapse:separate;border-spacing:2px;width:100%;min-width:640px}
+.matrix th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:600;text-align:left;padding:4px 6px}
+.matrix td{padding:8px 6px;border-radius:6px;font-size:12px;text-align:center;background:var(--bg)}
+.matrix td.ok{background:var(--accent-soft);color:var(--accent);font-weight:600;cursor:pointer}
+.matrix td.busy{color:var(--muted);opacity:.55}
+.matrix td.brk{background:transparent;opacity:.3}
+.matrix th.rowh{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;width:150px}
+.matrix{table-layout:fixed}
+.roomlist{display:flex;flex-wrap:wrap;gap:6px}
+.room{padding:5px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;cursor:pointer;background:var(--bg)}
+.room:hover{background:var(--accent-soft)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+select,input[type=text],input[type=password]{padding:7px 10px;border:1px solid var(--line);
+  border-radius:8px;background:var(--panel);color:var(--ink);font:14px var(--sans)}
+button.btn{padding:7px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);
+  color:#fff;font:14px var(--sans);cursor:pointer}
+button.btn.ghost{background:transparent;color:var(--accent)}
+button.btn:disabled{opacity:.5;cursor:default}
+label.lbl{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
+
+/* ---------- modal ---------- */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:100;
+  align-items:flex-start;justify-content:center;padding:60px 16px}
+.modal.open{display:flex}
+.modal .card{max-width:520px;width:100%;margin:0}
+.note{font-size:12px;color:var(--muted);margin-top:6px}
+.status{font-size:13px;margin-top:10px}
+.status.ok{color:var(--accent)}
+.status.err{color:#c0392b}
+kbd{font:11px var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.footer{color:var(--muted);font-size:12px;text-align:center;padding:8px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <div class="hdr">
+    <div class="brand" onclick="location.hash=''">BIS <span>Timetable</span></div>
+    <div class="grow">
+      <input id="q" class="searchbox" autocomplete="off" spellcheck="false"
+             placeholder="Search a teacher, grade or room…">
+      <div id="results" class="results"></div>
+    </div>
+    <div id="stamp" class="stamp"></div>
+    <button class="gear" onclick="openAdmin()" title="Admin">⚙</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="tabs">
+    <div class="tab" data-go="#/">Timetable</div>
+    <div class="tab" data-go="#/free">Who's free?</div>
+    <div class="tab" data-go="#/rooms">Free rooms</div>
+    <div class="tab" data-go="#/about">Data</div>
+  </nav>
+  <div id="view"></div>
+  <div class="footer" id="foot"></div>
+</div>
+
+<div class="modal" id="admin" onclick="if(event.target===this)closeAdmin()">
+  <div class="card">
+    <h1>Admin</h1>
+    <div id="adminBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+let DATA = null, CFG = null, IDX = null;
+
+/* ============================ boot ============================ */
+async function boot(){
+  try{
+    const [cfg, data] = await Promise.all([
+      fetch("config.json?_="+Date.now()).then(r=>r.json()).catch(()=>({})),
+      fetch("data/timetable.json?_="+Date.now()).then(r=>{
+        if(!r.ok) throw new Error("data/timetable.json missing ("+r.status+")");
+        return r.json();
+      })
+    ]);
+    CFG = cfg; DATA = data;
+    index();
+    stamp();
+    window.addEventListener("hashchange", route);
+    route();
+  }catch(e){
+    document.getElementById("view").innerHTML =
+      '<div class="card"><h1>No data yet</h1><p class="sub">'+esc(e.message)+
+      '</p><p>Run the <b>Refresh timetable</b> workflow in the repo once, then reload.</p></div>';
+  }
+}
+
+function index(){
+  const ev = DATA.events;
+  IDX = { teacher:new Map(), grade:new Map(), room:new Map(), subject:new Map() };
+  const push=(m,k,e)=>{ if(!k) return; if(!m.has(k)) m.set(k,[]); m.get(k).push(e); };
+  ev.forEach(e=>{
+    (e.teachers||[]).forEach(t=>push(IDX.teacher,t,e));
+    push(IDX.grade, e.grade, e);
+    push(IDX.room, e.room, e);
+    push(IDX.subject, e.subject, e);
+  });
+  DATA.meta.teachers.forEach(t=>{ if(!IDX.teacher.has(t)) IDX.teacher.set(t,[]); });
+  DATA.meta.rooms.forEach(t=>{ if(!IDX.room.has(t)) IDX.room.set(t,[]); });
+  DATA.meta.grades.forEach(t=>{ if(!IDX.grade.has(t)) IDX.grade.set(t,[]); });
+  DATA.meta.periods.forEach(p=>{ p.key = p.period!=null ? "p"+p.period : "b"+p.start; });
+}
+
+function stamp(){
+  const el = document.getElementById("stamp");
+  const d = new Date(DATA.fetched_at);
+  const days = (Date.now()-d.getTime())/864e5;
+  const limit = (CFG && CFG.staleAfterDays) || 7;
+  const t = DATA.term || {};
+  const term = t.schoolyear ? (t.schoolyear+" · term "+t.term) : ("t="+DATA.source.t);
+  el.className = "stamp" + (days>limit ? " stale":"");
+  el.innerHTML = '<span class="dot"></span>' + esc(term) + ' · data as of ' + fmtDate(d) +
+    (days>limit ? " — "+Math.floor(days)+" days old" : "");
+  el.title = "Scraped from bis.kg at " + d.toString();
+}
+
+const fmtDate = d => d.toLocaleString(undefined,
+  {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,
+  c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* colour per subject, stable across reloads */
+function hue(s){ let h=0; for(let i=0;i<(s||"").length;i++) h=(h*31+s.charCodeAt(i))%360; return h; }
+function evStyle(e){
+  const h = hue(e.subject||"");
+  const dark = matchMedia("(prefers-color-scheme:dark)").matches;
+  return "--evc:hsl("+h+",42%,"+(dark?"58%":"42%")+");--evbg:hsl("+h+","+(dark?"24%,14%":"56%,95%")+")";
+}
+
+/* ============================ routing ============================ */
+function route(){
+  const h = decodeURIComponent(location.hash.replace(/^#\/?/,""));
+  const parts = h.split("/").filter(x=>x!=="");
+  document.querySelectorAll(".tab").forEach(t=>{
+    const k = t.dataset.go.replace(/^#\//,"");
+    const cur = parts[0]||"";
+    t.classList.toggle("on", k===cur || (k==="" && ["teacher","grade","room","subject",""].includes(cur)));
+  });
+  window.scrollTo({top:0});
+  if(!parts.length) return renderHome();
+  switch(parts[0]){
+    case "teacher": case "grade": case "room": case "subject":
+      return renderEntity(parts[0], parts.slice(1).join("/"));
+    case "free":  return renderFree(parts[1]?parts[1].split("+"):[]);
+    case "rooms": return renderRooms(parts[1], parts[2]);
+    case "about": return renderAbout();
+    default: return renderHome();
+  }
+}
+const go = (kind,name) => { location.hash = "#/"+kind+"/"+encodeURIComponent(name); };
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{location.hash=t.dataset.go;});
+
+/* ============================ search ============================ */
+const KINDS = [["teacher","Teachers"],["grade","Grades"],["room","Rooms"],["subject","Subjects"]];
+let selIdx = -1, curHits = [];
+
+function search(term){
+  term = term.trim().toLowerCase();
+  if(!term) return [];
+  const hits = [];
+  KINDS.forEach(([kind,label])=>{
+    const names = [...IDX[kind].keys()].filter(Boolean);
+    names.forEach(n=>{
+      const l = n.toLowerCase();
+      const i = l.indexOf(term);
+      if(i<0) return;
+      // word-start matches rank above mid-word ones
+      const rank = (i===0?0:(/\s/.test(l[i-1])?1:2)) + (kind==="subject"?0.5:0);
+      hits.push({kind,label,name:n,rank,n:IDX[kind].get(n).length});
+    });
+  });
+  hits.sort((a,b)=>a.rank-b.rank || a.name.localeCompare(b.name));
+  return hits.slice(0,40);
+}
+
+function renderResults(hits){
+  const box = document.getElementById("results");
+  curHits = hits; selIdx = hits.length?0:-1;
+  if(!hits.length){ box.className="results"; box.innerHTML=""; return; }
+  let html="", last="";
+  hits.forEach((h,i)=>{
+    if(h.label!==last){ html += '<div class="res-group">'+h.label+'</div>'; last=h.label; }
+    html += '<div class="res'+(i===selIdx?" sel":"")+'" data-i="'+i+'">'+
+            '<span>'+esc(h.name)+'</span><small>'+h.n+' '+(h.n===1?"lesson":"lessons")+'</small></div>';
+  });
+  box.innerHTML = html; box.className = "results open";
+  box.querySelectorAll(".res").forEach(el=>el.onclick=()=>pick(+el.dataset.i));
+}
+
+function pick(i){
+  const h = curHits[i]; if(!h) return;
+  document.getElementById("q").value = "";
+  document.getElementById("results").className = "results";
+  go(h.kind, h.name);
+}
+
+const qEl = document.getElementById("q");
+qEl.addEventListener("input", ()=>renderResults(search(qEl.value)));
+qEl.addEventListener("keydown", e=>{
+  if(e.key==="Escape"){ qEl.value=""; document.getElementById("results").className="results"; return; }
+  if(!curHits.length) return;
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+    e.preventDefault();
+    selIdx = (selIdx + (e.key==="ArrowDown"?1:-1) + curHits.length) % curHits.length;
+    document.querySelectorAll(".res").forEach(el=>
+      el.classList.toggle("sel", +el.dataset.i===selIdx));
+    const s=document.querySelector(".res.sel"); if(s) s.scrollIntoView({block:"nearest"});
+  }
+  if(e.key==="Enter"){ e.preventDefault(); pick(selIdx); }
+});
+document.addEventListener("click", e=>{
+  if(!e.target.closest(".grow")) document.getElementById("results").className="results";
+});
+document.addEventListener("keydown", e=>{
+  if(e.key==="/" && document.activeElement!==qEl){ e.preventDefault(); qEl.focus(); }
+});
+
+/* ============================ views ============================ */
+function renderHome(){
+  const m = DATA.meta, r = DATA.report||{};
+  document.getElementById("view").innerHTML = `
+    <div class="card">
+      <h1>Find a timetable</h1>
+      <p class="sub">Type a name above, or press <kbd>/</kbd> from anywhere.
+         Every teacher, grade and room in the cell is clickable — click it to jump to that week.</p>
+      <div class="row" style="gap:24px">
+        <div><div style="font-size:26px;font-weight:600">${m.teachers.length}</div><div class="muted">teachers</div></div>
+        <div><div style="font-size:26px;font-weight:600">${m.grades.length}</div><div class="muted">grades</div></div>
+        <div><div style="font-size:26px;font-weight:600">${m.rooms.length}</div><div class="muted">rooms</div></div>
+        <div><div style="font-size:26px;font-weight:600">${DATA.events.length}</div><div class="muted">lessons a week</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Grades</h2>
+      <div class="roomlist">${m.grades.map(g=>
+        `<div class="room" onclick="go('grade',${JSON.stringify(g).replace(/"/g,"&quot;")})">${esc(g)}</div>`).join("")}</div>
+    </div>
+    <div class="card">
+      <h2>Rooms</h2>
+      <div class="roomlist">${m.rooms.map(g=>
+        `<div class="room" onclick="go('room',${JSON.stringify(g).replace(/"/g,"&quot;")})">${esc(g)}</div>`).join("")}</div>
+    </div>`;
+  document.getElementById("foot").textContent = "";
+}
+
+function eventsFor(kind,name){
+  const list = IDX[kind].get(name);
+  return list ? list.slice() : null;
+}
+
+function renderEntity(kind,name){
+  const list = eventsFor(kind,name);
+  const view = document.getElementById("view");
+  if(!list){
+    view.innerHTML = '<div class="card"><h1>Not found</h1><p class="sub">No '+esc(kind)+
+      ' called “'+esc(name)+'”.</p></div>';
+    return;
+  }
+  const kindLabel = {teacher:"Teacher",grade:"Grade",room:"Room",subject:"Subject"}[kind];
+  // one lesson taught to several grades is several events; count occupied slots
+  const n = new Set(list.map(e=>e.day+"|"+e.period+"|"+(e.start||""))).size;
+  const rooms = [...new Set(list.map(e=>e.room).filter(Boolean))];
+  const teaching = new Set(list.filter(e=>e.period<=9).map(e=>e.day+"|"+e.period)).size;
+  const capacity = DAYS.length*DATA.meta.periods.filter(p=>p.period&&p.period<=9).length;
+  let side = n+" lesson"+(n===1?"":"s")+" a week";
+  if(kind==="teacher") side += " · "+rooms.length+" room"+(rooms.length===1?"":"s");
+  else if(kind==="room") side += " · "+Math.round(100*teaching/capacity)+"% of P1–P9 used";
+
+  view.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:4px">
+        <div><h1>${esc(name)}</h1><p class="sub" style="margin:0">${kindLabel} · ${side}</p></div>
+        <div class="row" style="margin:0">
+          ${kind==="teacher"?`<button class="btn ghost" onclick="location.hash='#/free/'+encodeURIComponent(${JSON.stringify(name)})">Find free slots with…</button>`:""}
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="gridwrap">${weekGrid(list,kind)}</div></div>`;
+  document.getElementById("foot").innerHTML =
+    "Source: <a href='"+esc(DATA.source.url)+(kind==="teacher"?"te":kind==="room"?"cr":"sy")+
+    "' target='_blank' rel='noopener'>bis.kg timetable</a>";
+}
+
+function weekGrid(list, hideKind){
+  const byKey = {};
+  list.forEach(e=>{
+    const k = e.day+"|"+(e.period==null?"?":e.period);
+    (byKey[k] = byKey[k]||[]).push(e);
+  });
+  let html = '<table class="tt"><thead><tr><th class="pcell">Period</th>' +
+    DAYS.map(d=>'<th>'+d+'</th>').join("") + '</tr></thead><tbody>';
+  DATA.meta.periods.forEach(p=>{
+    if(p.break){
+      html += '<tr class="brk"><td class="pcell">'+esc(p.start)+'</td>'+
+              '<td colspan="5" class="free" style="padding-left:0">break</td></tr>';
+      return;
+    }
+    html += '<tr><td class="pcell"><div class="pnum">'+esc(p.label)+
+            '</div><div class="ptime">'+p.start+'–'+p.end+'</div></td>';
+    DAYS.forEach(d=>{
+      const evs = mergeCell(byKey[d+"|"+p.period]||[]);
+      html += '<td class="slot">' +
+        (evs.length ? evs.map(e=>evCard(e,hideKind)).join("") : '<div class="free">—</div>') +
+        '</td>';
+    });
+    html += '</tr>';
+  });
+  return html + '</tbody></table>';
+}
+
+/* One lesson taught to several grades at once (mixed-age sets) arrives as one
+   event per grade. Collapse those into a single card so a cell shows the lesson,
+   not three copies of it. Option blocks - different subjects in the same slot -
+   have different subjects and stay separate. */
+function mergeCell(evs){
+  const out = new Map();
+  evs.forEach(e=>{
+    const k = [e.subject,e.room,e.start,(e.teachers||[]).join("|")].join("\u0000");
+    if(!out.has(k)) out.set(k, {...e, grades: []});
+    const m = out.get(k);
+    if(e.grade && !m.grades.includes(e.grade)) m.grades.push(e.grade);
+  });
+  return [...out.values()].sort((a,b)=>
+    (a.start||"").localeCompare(b.start||"") ||
+    String(a.subject).localeCompare(String(b.subject)));
+}
+
+function chip(kind,name){
+  if(!name) return "";
+  return '<span class="chip" onclick="go(\''+kind+'\','+
+         JSON.stringify(name).replace(/"/g,"&quot;")+')">'+esc(name)+'</span>';
+}
+
+function evCard(e, hideKind){
+  const bits = [];
+  if(hideKind!=="teacher") (e.teachers||[]).forEach(t=>bits.push(chip("teacher",t)));
+  if(hideKind!=="grade") (e.grades||[e.grade]).filter(Boolean).forEach(g=>bits.push(chip("grade",g)));
+  if(hideKind!=="room" && e.room) bits.push(chip("room",e.room));
+  const timed = e.timed ? '<div class="t">'+esc(e.start)+'–'+esc(e.end)+'</div>' : "";
+  const flag = e.views && e.views.length<6
+      ? ' <span title="This lesson appears in only some of the source views" class="muted">·</span>' : "";
+  return '<div class="ev" style="'+evStyle(e)+'">'+
+         '<div class="s">'+esc(e.subject||"(no subject)")+flag+'</div>'+timed+
+         (bits.length?'<div class="m">'+bits.join("")+'</div>':"")+'</div>';
+}
+
+/* ---------- who's free ---------- */
+function renderFree(names){
+  names = names.filter(n=>IDX.teacher.has(n) || IDX.grade.has(n) || IDX.room.has(n));
+  const kindOf = n => IDX.teacher.has(n)?"teacher":(IDX.grade.has(n)?"grade":"room");
+  const busy = {};
+  names.forEach(n=>{
+    busy[n] = new Set((IDX[kindOf(n)].get(n)||[]).map(e=>e.day+"|"+e.period));
+  });
+  const periods = DATA.meta.periods.filter(p=>!p.break);
+  let matrix = "";
+  if(names.length){
+    matrix = '<div class="gridwrap"><table class="matrix"><tr><th></th>' +
+      DAYS.map(d=>'<th>'+d.slice(0,3)+'</th>').join("") + '</tr>';
+    periods.forEach(p=>{
+      matrix += '<tr><th class="rowh">'+esc(p.label)+' <span class="muted">'+p.start+'</span></th>';
+      DAYS.forEach(d=>{
+        const k = d+"|"+p.period;
+        const blocked = names.filter(n=>busy[n].has(k));
+        if(!blocked.length){
+          matrix += '<td class="ok" title="all free">free</td>';
+        }else{
+          const who = blocked.map(n=>n.split(" ")[0]).join(", ");
+          matrix += '<td class="busy" title="'+esc(blocked.join(", "))+' busy">'+
+            (blocked.length===names.length ? "—" : esc(who))+'</td>';
+        }
+      });
+      matrix += '</tr>';
+    });
+    matrix += '</table></div>';
+  }
+  const opts = ['teacher','grade','room'].map(k=>
+    '<optgroup label="'+k+'s">'+[...IDX[k].keys()].filter(Boolean).sort()
+      .map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join("")+'</optgroup>').join("");
+
+  document.getElementById("view").innerHTML = `
+    <div class="card">
+      <h1>Who's free?</h1>
+      <p class="sub">Add two or more people (or grades, or rooms). Green means every one of them
+         has nothing scheduled in that slot.</p>
+      <div class="pills">${names.map(n=>
+        '<span class="pill"><b>'+esc(n)+'</b><span class="x" onclick="dropFree('+
+        JSON.stringify(n).replace(/"/g,"&quot;")+')">×</span></span>').join("") ||
+        '<span class="muted">nobody selected yet</span>'}</div>
+      <div class="row">
+        <select id="freeAdd"><option value="">Add someone…</option>${opts}</select>
+        <button class="btn" onclick="addFree()">Add</button>
+        ${names.length?'<button class="btn ghost" onclick="location.hash=\'#/free\'">Clear</button>':''}
+      </div>
+      ${names.length<2?'<p class="note">Add at least two to see shared free slots — one on its own just shows their gaps.</p>':''}
+    </div>
+    ${matrix?'<div class="card">'+matrix+'</div>':''}`;
+  document.getElementById("foot").textContent = "";
+  window.__free = names;
+}
+function addFree(){
+  const v = document.getElementById("freeAdd").value;
+  if(!v) return;
+  const cur = (window.__free||[]).slice();
+  if(!cur.includes(v)) cur.push(v);
+  location.hash = "#/free/" + cur.map(encodeURIComponent).join("+");
+}
+function dropFree(n){
+  const cur = (window.__free||[]).filter(x=>x!==n);
+  location.hash = cur.length ? "#/free/"+cur.map(encodeURIComponent).join("+") : "#/free";
+}
+
+/* ---------- free rooms ---------- */
+function renderRooms(day, period){
+  day = DAYS.includes(day) ? day : DAYS[Math.min(4,Math.max(0,new Date().getDay()-1))];
+  const periods = DATA.meta.periods.filter(p=>!p.break);
+  period = period!=null && periods.some(p=>String(p.period)===String(period))
+           ? String(period) : String(periods[0].period);
+  const used = new Map();
+  DATA.events.forEach(e=>{
+    if(e.day===day && String(e.period)===period && e.room){
+      (used.get(e.room)||used.set(e.room,[]).get(e.room)).push(e);
+    }
+  });
+  const freeRooms = DATA.meta.rooms.filter(r=>!used.has(r));
+  const usedRooms = DATA.meta.rooms.filter(r=>used.has(r));
+  const p = periods.find(x=>String(x.period)===period);
+
+  document.getElementById("view").innerHTML = `
+    <div class="card">
+      <h1>Free rooms</h1>
+      <p class="sub">Rooms with nothing timetabled in the chosen slot.</p>
+      <div class="row">
+        <div><label class="lbl">Day</label>
+          <select id="rDay" onchange="roomsGo()">${DAYS.map(d=>
+            '<option'+(d===day?" selected":"")+'>'+d+'</option>').join("")}</select></div>
+        <div><label class="lbl">Period</label>
+          <select id="rPer" onchange="roomsGo()">${periods.map(x=>
+            '<option value="'+x.period+'"'+(String(x.period)===period?" selected":"")+'>'+
+            esc(x.label)+' · '+x.start+'–'+x.end+'</option>').join("")}</select></div>
+      </div>
+      <h2 style="margin-top:8px">${freeRooms.length} free · ${day} ${esc(p.label)} (${p.start}–${p.end})</h2>
+      <div class="roomlist">${freeRooms.map(r=>
+        '<div class="room" onclick="go(\'room\','+JSON.stringify(r).replace(/"/g,"&quot;")+')">'+
+        esc(r)+'</div>').join("") || '<span class="muted">none</span>'}</div>
+    </div>
+    <div class="card">
+      <h2>In use (${usedRooms.length})</h2>
+      <div class="roomlist">${usedRooms.map(r=>{
+        const e = used.get(r)[0];
+        return '<div class="room" title="'+esc((e.subject||"")+" · "+(e.teachers||[]).join(", "))+
+               '" onclick="go(\'room\','+JSON.stringify(r).replace(/"/g,"&quot;")+')">'+
+               esc(r)+' <span class="muted">'+esc(e.grade||e.subject||"")+'</span></div>';
+      }).join("")}</div>
+    </div>`;
+  document.getElementById("foot").textContent = "";
+}
+function roomsGo(){
+  location.hash = "#/rooms/"+encodeURIComponent(document.getElementById("rDay").value)+
+                  "/"+document.getElementById("rPer").value;
+}
+
+/* ---------- data / about ---------- */
+function renderAbout(){
+  const r = DATA.report||{}, s = DATA.source||{};
+  const rows = [
+    ["Lessons parsed", r.events],
+    ["Confirmed in all three source views", r.in_all_three_views],
+    ["Seen in only one view", r.single_view_only],
+    ["Lessons with no teacher named", r.events_without_teacher],
+    ["Cells the parser could not read", (r.unparsed_cells||[]).length],
+    ["Short names not matched to a full name", (r.unresolved_short_names||[]).length]
+  ];
+  const terms = (DATA.terms_available||[]).map(t=>
+    '<div class="room">t='+t.t+' · '+esc(t.schoolyear||"?")+' term '+esc(t.term||"?")+
+    (String(t.t)===String(s.t)?' <b>(shown)</b>':'')+'</div>').join("");
+  document.getElementById("view").innerHTML = `
+    <div class="card">
+      <h1>Where this data comes from</h1>
+      <p class="sub">Scraped from the three public BIS timetable views and cross-checked against
+         each other. Each view leaves something out, so agreement between them is the quality test.</p>
+      <table style="border-collapse:collapse">${rows.map(([k,v])=>
+        '<tr><td style="padding:4px 18px 4px 0" class="muted">'+k+'</td>'+
+        '<td style="padding:4px 0;font-weight:600">'+(v==null?"–":v)+'</td></tr>').join("")}</table>
+      <p class="note">Scraped ${esc(DATA.fetched_at)} from
+        <code>access=${esc(s.access)}&t=${esc(s.t)}</code>.</p>
+    </div>
+    ${terms?'<div class="card"><h2>Terms found on bis.kg</h2><div class="roomlist">'+terms+'</div>'+
+      '<p class="note">The scraper takes the newest one unless a term is pinned in the admin panel.</p></div>':''}
+    ${(r.unresolved_short_names||[]).length?'<div class="card"><h2>Ambiguous names</h2><p class="sub">'+
+      'These short forms appear in the room and grade views but match more than one member of staff, '+
+      'so they are left as written.</p><div class="roomlist">'+
+      r.unresolved_short_names.map(n=>'<div class="room">'+esc(n)+'</div>').join("")+'</div></div>':''}
+    ${(r.unparsed_cells||[]).length?'<div class="card"><h2>Unreadable cells</h2><div class="roomlist">'+
+      r.unparsed_cells.map(c=>'<div class="room">'+esc(c.text)+' ×'+c.n+'</div>').join("")+'</div></div>':''}`;
+  document.getElementById("foot").textContent = "";
+}
+
+/* ============================ admin ============================ */
+const LS = { tok:"bis_tt_token", ok:"bis_tt_admin" };
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+async function sha256(s){
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+function openAdmin(){
+  document.getElementById("admin").classList.add("open");
+  store.get(LS.ok)==="1" ? adminPanel() : adminLogin();
+}
+function closeAdmin(){ document.getElementById("admin").classList.remove("open"); }
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeAdmin(); });
+
+function adminLogin(){
+  document.getElementById("adminBody").innerHTML = `
+    <p class="sub">This panel changes which term is scraped and can trigger a refresh.
+       Everyone can read the timetable; only you should change it.</p>
+    <div class="row">
+      <input type="password" id="pw" placeholder="Password" style="flex:1">
+      <button class="btn" onclick="tryLogin()">Unlock</button>
+    </div>
+    <div id="aStatus" class="status"></div>`;
+  const pw = document.getElementById("pw");
+  pw.focus();
+  pw.onkeydown = e=>{ if(e.key==="Enter") tryLogin(); };
+}
+async function tryLogin(){
+  const h = await sha256(document.getElementById("pw").value);
+  if(CFG.adminHash && h===CFG.adminHash){ store.set(LS.ok,"1"); adminPanel(); }
+  else say("aStatus","Wrong password.","err");
+}
+function say(id,msg,cls){
+  const el=document.getElementById(id); if(!el) return;
+  el.className = "status "+(cls||""); el.textContent = msg;
+}
+
+function adminPanel(){
+  const terms = DATA.terms_available||[];
+  const cur = String(DATA.source.t);
+  document.getElementById("adminBody").innerHTML = `
+    <p class="sub">Currently showing <b>t=${esc(cur)}</b> (${esc((DATA.term||{}).schoolyear||"?")}
+       term ${esc((DATA.term||{}).term||"?")}), scraped ${esc(DATA.fetched_at)}.</p>
+
+    <h2>Which term</h2>
+    <div class="row">
+      <select id="aTerm">
+        <option value="">Newest term found (automatic)</option>
+        ${terms.map(t=>'<option value="'+t.t+'"'+(String(t.t)===cur?" selected":"")+'>t='+t.t+
+          ' · '+esc(t.schoolyear||"?")+' term '+esc(t.term||"?")+'</option>').join("")}
+      </select>
+      <input type="text" id="aAccess" value="${esc(DATA.source.access)}" size="6" title="access parameter">
+    </div>
+    <p class="note">Automatic is the safe choice: when BIS publishes the next term the scraper
+       moves to it on its own. Pin a term only to look at an old one.</p>
+
+    <h2 style="margin-top:16px">Refresh now</h2>
+    <p class="note" style="margin-top:0">Runs the scraper on GitHub and rewrites the data file.
+       Needs a fine-grained token with <b>Actions: read and write</b> on
+       <code>${esc((CFG&&CFG.repo)||"the repo")}</code>. It is stored in this browser only —
+       never in the repo, never visible to anyone else opening this page.</p>
+    <div class="row">
+      <input type="password" id="aTok" placeholder="${store.get(LS.tok)?"token saved in this browser":"github_pat_…"}" style="flex:1">
+      <button class="btn ghost" onclick="saveTok()">Save token</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="aRun" onclick="dispatch()">Refresh timetable</button>
+      <a class="btn ghost" style="text-decoration:none;display:inline-block"
+         href="https://github.com/${esc((CFG&&CFG.repo)||"")}/actions" target="_blank" rel="noopener">Open Actions</a>
+      <button class="btn ghost" onclick="logout()">Lock panel</button>
+    </div>
+    <div id="aStatus" class="status"></div>`;
+}
+function saveTok(){
+  const v = document.getElementById("aTok").value.trim();
+  if(!v) return say("aStatus","Nothing to save.","err");
+  store.set(LS.tok,v);
+  document.getElementById("aTok").value="";
+  say("aStatus","Token saved in this browser.","ok");
+}
+function logout(){ store.del(LS.ok); store.del(LS.tok); closeAdmin(); }
+
+async function dispatch(){
+  const tok = document.getElementById("aTok").value.trim() || store.get(LS.tok);
+  if(!tok) return say("aStatus","Enter a GitHub token first.","err");
+  const repo = (CFG&&CFG.repo)||"", wf = (CFG&&CFG.workflow)||"refresh.yml";
+  if(!repo) return say("aStatus",'config.json has no "repo" field.',"err");
+  const t = document.getElementById("aTerm").value;
+  const body = { ref:"main", inputs:{ access:document.getElementById("aAccess").value.trim()||"wip" } };
+  if(t){ body.inputs.t = String(t); body.inputs.pin = "true"; }
+  const btn = document.getElementById("aRun"); btn.disabled = true;
+  say("aStatus","Starting the workflow…");
+  try{
+    const r = await fetch("https://api.github.com/repos/"+repo+"/actions/workflows/"+wf+"/dispatches",{
+      method:"POST",
+      headers:{ "Accept":"application/vnd.github+json", "Authorization":"Bearer "+tok,
+                "X-GitHub-Api-Version":"2022-11-28", "Content-Type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    if(r.status===204){
+      store.set(LS.tok,tok);
+      say("aStatus","Started. It takes about a minute — reload this page after that.","ok");
+    }else{
+      const txt = await r.text();
+      say("aStatus","GitHub said "+r.status+": "+txt.slice(0,200),"err");
+    }
+  }catch(e){
+    say("aStatus","Could not reach GitHub: "+e.message,"err");
+  }finally{ btn.disabled = false; }
+}
+
+boot();
+</script>
+</body>
+</html>

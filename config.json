@@ -1,0 +1,70 @@
+{
+  "access": "wip",
+  "t": 110,
+  "pinTerm": false,
+  "autoDiscover": true,
+  "probeFrom": 100,
+  "probeTo": 140,
+  "terms": [
+    {
+      "t": 100,
+      "schoolyear": "2022",
+      "term": "1",
+      "section": "1",
+      "review": "3"
+    },
+    {
+      "t": 101,
+      "schoolyear": "2022",
+      "term": "5",
+      "section": "1",
+      "review": "1"
+    },
+    {
+      "t": 103,
+      "schoolyear": "2023",
+      "term": "1",
+      "section": "1",
+      "review": "1"
+    },
+    {
+      "t": 104,
+      "schoolyear": "2023",
+      "term": "2",
+      "section": "1",
+      "review": "1"
+    },
+    {
+      "t": 105,
+      "schoolyear": "2024",
+      "term": "1",
+      "section": "1",
+      "review": "1"
+    },
+    {
+      "t": 106,
+      "schoolyear": "2025",
+      "term": "1",
+      "section": "1",
+      "review": "1"
+    },
+    {
+      "t": 109,
+      "schoolyear": "2026",
+      "term": "0",
+      "section": "1",
+      "review": "1"
+    },
+    {
+      "t": 110,
+      "schoolyear": "2026",
+      "term": "1",
+      "section": "1",
+      "review": "1"
+    }
+  ],
+  "repo": "ninenko/bis-timetable",
+  "workflow": "refresh.yml",
+  "adminHash": "3210ecdbfe2d3c17f30652a3d79222a855ad65065438a509511fb0f0ec6c16ed",
+  "staleAfterDays": 7
+}
