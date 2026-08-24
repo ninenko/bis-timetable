@@ -53,6 +53,14 @@ jobs:
           print("config:", cfg["access"], cfg["t"], "pinned" if cfg["pinTerm"] else "auto")
           PY
 
+      - name: Check bis.kg is reachable from this runner
+        run: |
+          URL="https://www.bis.kg/timetable/timetable.php?access=wip&t=110&view=sy"
+          curl -4 -sS -m 25 -o /dev/null -w "IPv4: %{http_code} in %{time_total}s\n" "$URL" \
+            || echo "IPv4: FAILED"
+          curl -6 -sS -m 10 -o /dev/null -w "IPv6: %{http_code} in %{time_total}s\n" "$URL" \
+            || echo "IPv6: FAILED (expected on GitHub runners)"
+
       - name: Scrape
         run: python3 scripts/scrape.py
 
