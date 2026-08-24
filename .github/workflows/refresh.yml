@@ -1,0 +1,74 @@
+name: Refresh timetable
+
+on:
+  schedule:
+    - cron: "17 3,9,15 * * *"   # three times a day, UTC
+  workflow_dispatch:
+    inputs:
+      t:
+        description: "Term id (blank = newest term found)"
+        required: false
+        default: ""
+      access:
+        description: "access parameter"
+        required: false
+        default: "wip"
+      pin:
+        description: "Pin to the given term instead of auto-following the newest"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install parser
+        run: pip install beautifulsoup4
+
+      - name: Apply admin inputs
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          T: ${{ inputs.t }}
+          ACCESS: ${{ inputs.access }}
+          PIN: ${{ inputs.pin }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          cfg = json.load(open("config.json"))
+          if os.environ.get("T"):
+              cfg["t"] = int(os.environ["T"])
+          if os.environ.get("ACCESS"):
+              cfg["access"] = os.environ["ACCESS"]
+          cfg["pinTerm"] = os.environ.get("PIN", "false").lower() == "true"
+          json.dump(cfg, open("config.json", "w"), indent=2, ensure_ascii=False)
+          print("config:", cfg["access"], cfg["t"], "pinned" if cfg["pinTerm"] else "auto")
+          PY
+
+      - name: Scrape
+        run: python3 scripts/scrape.py
+
+      - name: Commit if the timetable actually changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # content_hash ignores the timestamp, so an unchanged timetable is not committed
+          old=$(git show HEAD:data/timetable.json 2>/dev/null | python3 -c \
+                "import json,sys;print(json.load(sys.stdin).get('content_hash',''))" 2>/dev/null || echo "")
+          new=$(python3 -c "import json;print(json.load(open('data/timetable.json'))['content_hash'])")
+          echo "old=$old new=$new"
+          if [ "$old" = "$new" ] && git diff --quiet -- config.json; then
+            echo "Timetable unchanged - nothing to commit."
+            exit 0
+          fi
+          git add data/timetable.json config.json
+          git commit -m "timetable: $new ($(date -u +%Y-%m-%d\ %H:%M) UTC)"
+          git push
